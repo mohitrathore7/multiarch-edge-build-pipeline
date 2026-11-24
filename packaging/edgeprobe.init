@@ -1,0 +1,20 @@
+#!/bin/sh
+# SysV init script shared by the Buildroot and Yocto images.
+# Runs edgeprobe once at boot and prints a marker on the console that the
+# QEMU boot test (scripts/qemu-boot-test.sh) gates on.
+
+case "$1" in
+  start)
+    echo "edgeprobe: $(/usr/bin/edgeprobe --version)"
+    if HEALTH="$(/usr/bin/edgeprobe --health)"; then
+      echo "edgeprobe: $HEALTH"
+      echo "EDGEPROBE_BOOT_OK"
+    else
+      echo "edgeprobe: $HEALTH"
+      echo "EDGEPROBE_BOOT_FAIL"
+    fi
+    ;;
+  stop) ;;
+  *) echo "usage: $0 {start|stop}"; exit 1 ;;
+esac
+exit 0

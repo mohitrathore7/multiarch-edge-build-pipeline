@@ -1,0 +1,5 @@
+header:
+  version: 14
+  includes:
+    - yocto/kas/base.yml  # include paths are relative to the repo root
+machine: qemuarm

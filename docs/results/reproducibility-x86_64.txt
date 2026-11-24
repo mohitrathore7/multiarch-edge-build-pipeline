@@ -1,0 +1,17 @@
+target:            x86_64-unknown-linux-gnu
+source_date_epoch: 1795529704
+commit:            925910f
+rustc:             rustc 1.97.0 (2d8144b78 2026-07-07)
+runs:              10
+unique_hashes:     1
+run_01:            9147cd633f14516a4882dcd5ed0a1a957a9d07a48eb2d64078dd240eec4f2e0a
+run_02:            9147cd633f14516a4882dcd5ed0a1a957a9d07a48eb2d64078dd240eec4f2e0a
+run_03:            9147cd633f14516a4882dcd5ed0a1a957a9d07a48eb2d64078dd240eec4f2e0a
+run_04:            9147cd633f14516a4882dcd5ed0a1a957a9d07a48eb2d64078dd240eec4f2e0a
+run_05:            9147cd633f14516a4882dcd5ed0a1a957a9d07a48eb2d64078dd240eec4f2e0a
+run_06:            9147cd633f14516a4882dcd5ed0a1a957a9d07a48eb2d64078dd240eec4f2e0a
+run_07:            9147cd633f14516a4882dcd5ed0a1a957a9d07a48eb2d64078dd240eec4f2e0a
+run_08:            9147cd633f14516a4882dcd5ed0a1a957a9d07a48eb2d64078dd240eec4f2e0a
+run_09:            9147cd633f14516a4882dcd5ed0a1a957a9d07a48eb2d64078dd240eec4f2e0a
+run_10:            9147cd633f14516a4882dcd5ed0a1a957a9d07a48eb2d64078dd240eec4f2e0a
+result:            REPRODUCIBLE

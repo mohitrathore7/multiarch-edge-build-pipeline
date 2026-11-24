@@ -1,0 +1,20 @@
+# Cross-compilation linkers (Debian/Ubuntu cross GCC packages).
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
+runner = "qemu-aarch64 -L /usr/aarch64-linux-gnu"
+
+[target.armv7-unknown-linux-gnueabihf]
+linker = "arm-linux-gnueabihf-gcc"
+runner = "qemu-arm -L /usr/arm-linux-gnueabihf"
+
+[build]
+# Reproducibility: strip machine-specific paths from the binary and
+# drop the GNU build-id. Both are guards (see docs/DESIGN.md): they keep
+# builds identical across runners once dependencies or debug info are added.
+rustflags = [
+  "-C", "link-arg=-Wl,--build-id=none",
+  "--remap-path-prefix=/root=/build",
+  "--remap-path-prefix=/builds=/build",
+  "--remap-path-prefix=/home=/build",
+  "--remap-path-prefix=/tmp=/build",
+]

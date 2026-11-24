@@ -1,0 +1,2 @@
+name: EDGEPROBE
+desc: BR2_EXTERNAL tree that installs the CI-verified edgeprobe artifact

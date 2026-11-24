@@ -1,0 +1,22 @@
+[package]
+name = "edgeprobe"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"  # MSRV: matches Rust in Yocto scarthgap (5.0 LTS)
+description = "Tiny edge-device health probe used as the reference Rust app for the multi-arch build pipeline"
+license = "MIT"
+repository = "https://github.com/mohitrathore7/multiarch-edge-build-pipeline"
+readme = "README.md"
+
+# No external dependencies on purpose: smaller attack surface, smaller SBOM,
+# and fewer moving parts for bit-for-bit reproducible builds.
+[dependencies]
+
+[profile.release]
+opt-level = "z"        # small binaries for constrained devices
+lto = true
+codegen-units = 1      # deterministic codegen
+panic = "abort"
+strip = "symbols"
+debug = false
+incremental = false

@@ -1,0 +1,34 @@
+[verify.sh] verifying ./dist/x86_64/edgeprobe (x86_64-unknown-linux-gnu)
+  PASS sha256 matches edgeprobe.sha256
+  PASS class ELF64
+  PASS machine Advanced Micro Devices X86-64
+  PASS interpreter /lib64/ld-linux-x86-64.so.2 (got '/lib64/ld-linux-x86-64.so.2')
+  PASS stripped (no .symtab)
+  PASS no build paths leaked 
+  PASS needs glibc 2.34 (<= 2.34)
+  PASS size 343 KiB (budget 512 KiB)
+[verify.sh] OK: all checks passed for x86_64-unknown-linux-gnu
+
+[verify.sh] verifying ./dist/arm64/edgeprobe (aarch64-unknown-linux-gnu)
+  PASS sha256 matches edgeprobe.sha256
+  PASS class ELF64
+  PASS machine AArch64
+  PASS interpreter /lib/ld-linux-aarch64.so.1 (got '/lib/ld-linux-aarch64.so.1')
+  PASS stripped (no .symtab)
+  PASS no build paths leaked 
+  PASS needs glibc 2.34 (<= 2.34)
+  PASS size 258 KiB (budget 512 KiB)
+[verify.sh] OK: all checks passed for aarch64-unknown-linux-gnu
+
+[verify.sh] verifying ./dist/armv7/edgeprobe (armv7-unknown-linux-gnueabihf)
+  PASS sha256 matches edgeprobe.sha256
+  PASS class ELF32
+  PASS machine ARM
+  PASS armhf (hard-float ABI)
+  PASS interpreter /lib/ld-linux-armhf.so.3 (got '/lib/ld-linux-armhf.so.3')
+  PASS stripped (no .symtab)
+  PASS no build paths leaked 
+  PASS needs glibc 2.34 (<= 2.34)
+  PASS size 261 KiB (budget 512 KiB)
+[verify.sh] OK: all checks passed for armv7-unknown-linux-gnueabihf
+

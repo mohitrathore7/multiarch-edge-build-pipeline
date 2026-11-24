@@ -1,0 +1,35 @@
+# kas project: core-image-minimal + edgeprobe on Yocto scarthgap (5.0 LTS).
+# Run from the repo root, e.g.:
+#   kas build yocto/kas/qemuarm64.yml   (or qemuarm.yml / qemux86_64.yml)
+header:
+  version: 14
+
+distro: poky
+target: core-image-minimal
+
+repos:
+  # This repository itself provides the layer.
+  multiarch-edge-build-pipeline:
+    layers:
+      yocto/meta-edgeprobe:
+
+  poky:
+    url: https://git.yoctoproject.org/poky
+    branch: scarthgap
+    layers:
+      meta:
+      meta-poky:
+
+local_conf_header:
+  edgeprobe: |
+    IMAGE_INSTALL:append = " edgeprobe"
+    # Reproducible builds are built into OE-core since nanbield (no class needed).
+    # SPDX SBOM for the whole image (complements the CycloneDX SBOM of the binary).
+    INHERIT += "create-spdx"
+    SPDX_PRETTY = "1"
+    # Smaller CI footprint.
+    INHERIT += "rm_work"
+    BB_NUMBER_THREADS ?= "${@oe.utils.cpu_count()}"
+  qemu: |
+    # runqemu-friendly image for the boot test
+    IMAGE_FSTYPES:append = " ext4"

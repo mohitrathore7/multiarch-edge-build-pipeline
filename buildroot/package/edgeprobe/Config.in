@@ -1,0 +1,12 @@
+config BR2_PACKAGE_EDGEPROBE
+	bool "edgeprobe"
+	depends on BR2_x86_64 || BR2_aarch64 || BR2_arm
+	depends on BR2_TOOLCHAIN_USES_GLIBC
+	help
+	  Edge-device health probe (Rust). Installs the prebuilt binary
+	  from dist/<arch>/ that the CI pipeline already built, verified,
+	  checked for reproducibility and signed, so the image ships the
+	  exact same bits that were tested.
+
+comment "edgeprobe needs a glibc toolchain"
+	depends on !BR2_TOOLCHAIN_USES_GLIBC

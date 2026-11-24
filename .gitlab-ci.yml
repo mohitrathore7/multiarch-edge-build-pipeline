@@ -1,0 +1,258 @@
+# Multi-architecture build & CI/CD pipeline for a Rust edge application.
+#
+#   prepare -> lint -> test -> build (x3) -> verify (x3) -> reproducibility (x3)
+#           -> sbom (x3) -> sign (x3) -> image (Buildroot x3, Yocto x3)
+#           -> boot-test (QEMU x3) -> release
+#
+# Every per-arch stage uses the same build matrix (.arch-matrix), so adding
+# an architecture means adding one line there plus its mapping in
+# scripts/common.sh.
+
+stages:
+  - prepare
+  - lint
+  - test
+  - build
+  - verify
+  - sbom-sign
+  - image
+  - boot-test
+  - release
+
+variables:
+  BUILDER_IMAGE: "$CI_REGISTRY_IMAGE/builder:latest"
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo-home"
+  REPRO_RUNS: "10"            # clean rebuilds per arch in the reproducibility job
+  MAX_SIZE_KB: "512"          # size budget for constrained devices
+  MAX_GLIBC: "2.34"           # oldest glibc the target rootfs may have
+  BUILDROOT_VERSION: "2024.02.9"
+  GIT_DEPTH: "20"
+
+default:
+  image: $BUILDER_IMAGE
+  interruptible: true
+  before_script:
+    # build.rs embeds this instead of wall-clock time
+    - export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+    - rustc --version && cargo --version
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+# ---------------------------------------------------------------- templates
+
+.arch-matrix:
+  parallel:
+    matrix:
+      - TARGET: x86_64-unknown-linux-gnu
+        ARCH: x86_64
+      - TARGET: aarch64-unknown-linux-gnu
+        ARCH: arm64
+      - TARGET: armv7-unknown-linux-gnueabihf
+        ARCH: armv7
+
+.cargo-cache:
+  cache:
+    key: "cargo-$CI_JOB_NAME_SLUG"
+    paths: [.cargo-home/registry, target/]
+
+# On main, tags and schedules images are built automatically; on MRs they
+# are optional so a normal code review stays fast.
+.image-rules:
+  rules:
+    - if: $CI_COMMIT_TAG || $CI_PIPELINE_SOURCE == "schedule" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - when: manual
+      allow_failure: true
+
+# ------------------------------------------------------------------ prepare
+
+builder-image:
+  stage: prepare
+  image: docker:27
+  services: [docker:27-dind]
+  before_script: []
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - docker build -t "$BUILDER_IMAGE" -t "$CI_REGISTRY_IMAGE/builder:$CI_COMMIT_SHORT_SHA" ci/
+    - docker push --all-tags "$CI_REGISTRY_IMAGE/builder"
+  rules:
+    - changes: [ci/Dockerfile]
+
+# --------------------------------------------------------------------- lint
+
+fmt-clippy:
+  stage: lint
+  extends: .cargo-cache
+  script:
+    - cargo fmt --all -- --check
+    - cargo clippy --locked --all-targets -- -D warnings
+
+shellcheck:
+  stage: lint
+  before_script: []
+  script:
+    - shellcheck -x scripts/*.sh packaging/edgeprobe.init
+
+# --------------------------------------------------------------------- test
+
+test-host:
+  stage: test
+  extends: .cargo-cache
+  script:
+    - cargo test --locked
+
+# Unit tests for the cross targets, executed under QEMU user-mode
+# (runner configured in .cargo/config.toml).
+test-cross:
+  stage: test
+  extends: .cargo-cache
+  parallel:
+    matrix:
+      - TARGET: [aarch64-unknown-linux-gnu, armv7-unknown-linux-gnueabihf]
+  script:
+    - cargo test --locked --target "$TARGET" --bins
+
+# -------------------------------------------------------------------- build
+
+build:
+  stage: build
+  extends: [.arch-matrix, .cargo-cache]
+  needs: [fmt-clippy, test-host]
+  script:
+    - scripts/build.sh "$TARGET"
+  artifacts:
+    name: "edgeprobe-$ARCH-$CI_COMMIT_SHORT_SHA"
+    paths: ["dist/$ARCH/"]
+    expire_in: 1 week
+
+# ------------------------------------------------------------------- verify
+
+verify:
+  stage: verify
+  extends: .arch-matrix
+  needs: [build]
+  before_script: []
+  script:
+    - scripts/verify.sh "$TARGET"            # ELF/ABI/glibc/strip/size/path checks
+    - scripts/qemu-user-smoke.sh "$TARGET"   # actually run it (QEMU user-mode)
+
+reproducibility:
+  stage: verify
+  extends: .arch-matrix
+  needs: [build]
+  script:
+    # N clean builds in different directories; all hashes must match each
+    # other AND the artifact from the build job.
+    - scripts/repro-check.sh "$TARGET" "$REPRO_RUNS"
+  artifacts:
+    paths: ["dist/reproducibility-$ARCH.txt"]
+    expire_in: 1 month
+
+# ---------------------------------------------------------------- sbom-sign
+
+sbom:
+  stage: sbom-sign
+  extends: .arch-matrix
+  needs: [build, verify]
+  script:
+    - scripts/sbom.sh "$TARGET"
+  artifacts:
+    paths: ["dist/$ARCH/edgeprobe.cdx.json"]
+    expire_in: 1 week
+
+# Needs CI/CD variables: COSIGN_PRIVATE_KEY (type File), COSIGN_PASSWORD
+# (masked) and cosign.pub committed to the repo. Skipped when not set.
+sign:
+  stage: sbom-sign
+  extends: .arch-matrix
+  needs: [build, sbom, reproducibility]
+  before_script: []
+  script:
+    - scripts/sign.sh "$TARGET"
+  artifacts:
+    paths: ["dist/$ARCH/*.sig"]
+    expire_in: 1 week
+  rules:
+    - if: $COSIGN_PRIVATE_KEY
+
+# -------------------------------------------------------------------- image
+
+buildroot-image:
+  stage: image
+  extends: [.arch-matrix, .image-rules]
+  needs: [build, verify]
+  timeout: 3h
+  before_script: []
+  script:
+    - scripts/buildroot-image.sh "$TARGET"
+  cache:
+    key: "buildroot-$BUILDROOT_VERSION-$ARCH"
+    paths: [.buildroot/]
+  artifacts:
+    paths: ["br-images/$ARCH/"]
+    expire_in: 1 week
+
+# Full Yocto build is heavy: dedicated runner, scheduled or on demand.
+yocto-image:
+  stage: image
+  image: ghcr.io/siemens/kas/kas:4.5
+  needs: []
+  timeout: 6h
+  tags: [yocto]
+  before_script: []
+  parallel:
+    matrix:
+      - MACHINE_FILE: [qemux86_64, qemuarm64, qemuarm]
+  script:
+    - kas build "yocto/kas/$MACHINE_FILE.yml"
+  artifacts:
+    paths:
+      - build/tmp/deploy/images/
+      - build/tmp/deploy/spdx/
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_TAG || $CI_PIPELINE_SOURCE == "schedule"
+    - when: manual
+      allow_failure: true
+
+# ---------------------------------------------------------------- boot-test
+
+qemu-boot-test:
+  stage: boot-test
+  extends: [.arch-matrix, .image-rules]
+  needs: [buildroot-image]
+  before_script: []
+  script:
+    - scripts/qemu-boot-test.sh "$TARGET"
+  artifacts:
+    when: always
+    paths: ["dist/boot-$ARCH.log"]
+    expire_in: 1 week
+
+# ------------------------------------------------------------------ release
+
+release:
+  stage: release
+  needs:
+    - build
+    - sbom
+    - reproducibility
+    - qemu-boot-test
+    - job: sign
+      optional: true   # sign is skipped when no key is configured
+  before_script: []
+  script:
+    - cd dist
+    - for a in x86_64 arm64 armv7; do cp "$a/edgeprobe" "edgeprobe-$CI_COMMIT_TAG-$a"; done
+    - sha256sum edgeprobe-* */edgeprobe.cdx.json > SHA256SUMS
+    - cat SHA256SUMS reproducibility-*.txt
+  artifacts:
+    paths: [dist/]
+    expire_in: never
+  rules:
+    - if: $CI_COMMIT_TAG
